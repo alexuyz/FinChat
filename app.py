@@ -259,6 +259,14 @@ ALL_TOOL_FUNCTIONS = {
 }
 
 
+def _format_tools(tools: List[str]) -> str:
+    if not tools:
+        return "none"
+    # Preserve order while de-duplicating repeated tool calls.
+    unique_tools = list(dict.fromkeys(tools))
+    return ", ".join(unique_tools)
+
+
 SINGLE_AGENT_PROMPT = """
 You are an expert financial analyst assistant with access to market-data tools and a local stock database.
 Always use tool data for current information.
@@ -522,7 +530,10 @@ def main():
             st.markdown(message["content"])
             if message["role"] == "assistant":
                 st.caption(
-                    f"Architecture: {message.get('architecture', 'n/a')} | Model: {message.get('model', 'n/a')}"
+                    "Architecture: "
+                    f"{message.get('architecture', 'n/a')} | "
+                    f"Model: {message.get('model', 'n/a')} | "
+                    f"Tools: {message.get('tools_used', 'none')}"
                 )
 
     user_input = st.chat_input("Ask a financial question...")
@@ -542,16 +553,22 @@ def main():
                     result = run_single_agent(client, model_choice, st.session_state.messages)
                     assistant_text = result.answer
                     arch_used = "single-agent"
+                    tools_used = _format_tools(result.tools_called)
                 else:
                     result = run_multi_agent(client, model_choice, st.session_state.messages)
                     assistant_text = result["final_answer"]
                     arch_used = result["architecture"]
+                    all_tools = []
+                    for agent_result in result["agent_results"]:
+                        all_tools.extend(agent_result.tools_called)
+                    tools_used = _format_tools(all_tools)
             except Exception as e:
                 assistant_text = f"Error: {e}"
                 arch_used = architecture_choice.lower()
+                tools_used = "none"
 
         st.markdown(assistant_text)
-        st.caption(f"Architecture: {arch_used} | Model: {model_choice}")
+        st.caption(f"Architecture: {arch_used} | Model: {model_choice} | Tools: {tools_used}")
 
     st.session_state.messages.append(
         {
@@ -559,6 +576,7 @@ def main():
             "content": assistant_text,
             "architecture": arch_used,
             "model": model_choice,
+            "tools_used": tools_used,
         }
     )
 
